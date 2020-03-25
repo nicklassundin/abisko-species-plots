@@ -17,84 +17,94 @@ fiveDays <- function(dates){
 	return(result)
 }
 
-
 data$day <- fiveDays(data$DOY)
 data
-insertGroup <- function(group, phase = NA){
-	res <- unique(data$Species[data$`Functional Group` %in% group]);
-	res <- sapply(res, function(x){
-			      full = NA;
-			      if(!is.na(phase)){
-				      full <- data$day[(data$Species %in% x)[data$Phenophase %in% phase]]
-				      if(length(full) < 1) return(Inf)
-			      }else{
-				      full <- data$day[data$Species %in% x]
-			      }
-			      return(min(full))
-}) 
-	return(res)
+yAxis <- c(0, length(unique(data$Species)));
+period <- unique(data[order(data$day),]$day);
+period <- seq(min(period), max(period), by = 5);
+xAxis <- c(min(period), max(period));
+
+
+insertGroup <- function(entry, key, keys = unlist(unique(entry[key]))){
+	group <- sapply(keys, function(grp){
+				table <- entry[entry[[key]] %in% grp,]
+				return(sapply(period, function(y){
+						      res <- unique(table$Species);
+						      res <- sapply(res, function(x){
+									    full <- table$day[table$Species %in% x]
+									    return(min(full))
+})					
+						      return(length(res[res %in% y]))
+}))
+})
+	colnames(group) <- keys;
+	print(group)
+	total <- c(0, apply(group, 1, function(x){ return(sum(x)) }));
+	total <- head(Reduce(f = "+", total, accumulate = TRUE), -1)
+	group <- cbind(total, group)
+	colnames(group)[1] <- "total";
+	print(group)
+	return(group)
 }
 
-output <- list();
-output$period <- unique(data[order(data$day),]$day);
-period <- seq(min(output$period), max(output$period), by = 5);
-completeGroup <- function(group){
-	res <- list();
-	res$first <- insertGroup(group);
-	res$flow <- insertGroup(group, "Flowering")
-	res$fruit <- insertGroup(group, "Fruit")
-	res$senescence <- insertGroup(group, "Senescence")
-	res$leaf <- insertGroup(group, "Leaf development")
-	# All will be catogorized as other
-	res$other <- insertGroup(group, "All")
-	res$new <- sapply(period, function(x){
-				  return(length(res$first[res$first %in% x]));
-})
-	res$total <- sapply(period, function(x){
-				    return(sum(res$new[period < x]))
-})
-	return(res)
+completeGroup <- function(){
+	return(list(data.frame(
+			  period = c(period),
+			  groups = c(rep(c("Total"), each = length(period)), 
+				     rep(c(" Woody Plants (Trees & Shrubs)"), each = length(period)),
+				     rep(c(" Graminoids"), each = length(period)),
+				     rep(c(" Forbs"), each = length(period)),
+				     rep(c(" Primitive Plants"), each = length(period))),
+			  group = c(insertGroup(data, "Functional Group")),
+			  new = c(rep(c("Total"), each = length(period)), 
+				  rep(c("New"), each = length(period)*4))
+			  ),
+	       data.frame(
+			  period = c(period),
+			  phase = c(insertGroup(data, "Phenophase")),
+			  phases = c(rep(c("Total"), each = length(period)), 
+				     rep(c(" ALL"), each = length(period)),
+				     rep(c(" Leaf development"), each = length(period)),
+				     rep(c(" Flowering"), each = length(period)),
+				     rep(c(" Other"), each = length(period)),
+				     rep(c(" Fruit"), each = length(period)),
+				     rep(c(" Seed Dispersal"), each = length(period)),
+				     rep(c(" Senescence"), each = length(period)),
+				     rep(c(" Leaf fall"), each = length(period)))
+			  )))
 }
-species <- list();
-species$w <- completeGroup("W");
-species$g <- completeGroup("G");
-species$f <- completeGroup("F");
-species$p <- completeGroup("P");
-
-# species
+df <- completeGroup();
+# df
 warnings()
-output$total <- species$w$total + species$g$total + species$f$total + species$p$total;
-# output
-
 theme_set(theme_minimal())
 
 
-
-df <- data.frame(
-		 groups = c(rep(c("Total"), each = length(period)), 
-			    rep(c(" Woody Plants (Trees & Shrubs)"), each = length(period)),
-			    rep(c(" Graminoids"), each = length(period)),
-			    rep(c(" Forbs"), each = length(period)),
-			    rep(c(" Primitive Plants"), each = length(period))) ,
-		 period = c(period),
-		 group = c(output$total,
-			   species$w$new,
-			   species$g$new,
-			   species$f$new,
-			   species$p$new),
-		 new = c(rep(c("Total"), each = length(period)), 
-			    rep(c("New"), each = length(period)*4)))
-# df
 p2 <- ggplot() + 
-	geom_bar(aes(y = group, x = period, fill = new), data = df, stat="identity") +
+	geom_bar(aes(y = group, x = period, fill = new), data = df[[1]], stat="identity") +
 	labs(title = "Species Discovery by Date") +
 	xlab("Day of year (based on 5-day sampling)") +
-	ylab("Number of Species")
+	ylab("Number of Species") +
+	scale_y_continuous(limits = yAxis) +
+	scale_x_continuous(limits = xAxis) + coord_fixed()
 p2
+ggsave("species.png")
 p1 <- ggplot() + 
-	geom_bar(aes(y = group, x = period, fill = groups), data = df, stat="identity") +
+	geom_bar(aes(y = group, x = period, fill = groups), data = df[[1]], stat="identity") +
 	labs(title = "Number of new species by Plant Functional Group") + 
 	xlab("Day of year (based on 5-day sampling)") +
-	ylab("Number of Species")
+	ylab("Number of Species") +
+	scale_y_continuous(limits = yAxis) +
+	scale_x_continuous(limits = xAxis) + coord_fixed()
+p1
+ggsave("functional_group.png")
+p1 <- ggplot() + 
+	geom_bar(aes(y = phase, x = period, fill = phases), data = df[[2]], stat="identity") +
+	labs(title = "Species Discovery by Phenology Phase") + 
+	xlab("Day of year (based on 5-day sampling)") +
+	ylab("Number of Species") + 
+	scale_y_continuous(limits = yAxis) +
+	scale_x_continuous(limits = xAxis) + coord_fixed()
 
 p1
+
+ggsave("phenology.png")
