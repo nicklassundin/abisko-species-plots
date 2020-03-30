@@ -197,7 +197,6 @@ colours$phaseAll <- tail(colours$phase, -1)
 pdf(paste(f, ".pdf", sep="_"));
 ## PLot I
 ##############
-  mutate(period=factor(order, levels=order))
 group_plot <- ggplot(data = df[[1]],
 		 aes(y = group, x = period, fill = groups)) +
 	geom_bar(stat="identity", width=4, colour = "black") +
